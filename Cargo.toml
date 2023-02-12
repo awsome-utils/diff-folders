@@ -1,0 +1,15 @@
+[package]
+name = "diff-folders"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0"
+scopeguard = "1.1"
+similar = "2.2.1"
+tui = { version = "0.19", default-features = false, features = ['crossterm', 'serde'] }
+crossterm = { version = "0.26.0", features = [ "serde" ] }
+walkdir = "2.3.2"
+file_diff = "1.0.0"
