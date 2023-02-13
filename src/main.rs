@@ -8,7 +8,7 @@ use diff_folders::app::App;
 use scopeguard::defer;
 use std::{
     env::args,
-    io::{self, Write},
+    io::{self, Write}, path,
 };
 use tui::{
     backend::{Backend, CrosstermBackend},
@@ -43,8 +43,14 @@ fn main() -> Result<()> {
 fn parse_args() -> (String, String) {
     let mut args = args();
     args.next();
-    let old_dir = args.next().unwrap();
-    let new_dir = args.next().unwrap();
+    let mut old_dir = args.next().unwrap();
+    let mut new_dir = args.next().unwrap();
+    if old_dir.ends_with(path::MAIN_SEPARATOR) {
+        old_dir = old_dir[0..old_dir.len()-1].to_string();
+    }
+    if new_dir.ends_with(path::MAIN_SEPARATOR) {
+        new_dir = new_dir[0..new_dir.len()-1].to_string();
+    }
     (old_dir, new_dir)
 }
 
