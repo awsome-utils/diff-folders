@@ -14,6 +14,8 @@ pub enum StatusItemType {
 }
 
 ///
+
+#[derive(Clone)]
 pub struct FolderStatefulList {
 	pub entry: walkdir::DirEntry,
 	pub state: StatusItemType, 
