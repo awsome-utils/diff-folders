@@ -2,9 +2,10 @@ use crate::status::{FolderStatefulList, StatefulList};
 use crossterm::event::KeyCode;
 use file_diff::diff;
 use similar::{ChangeTag, TextDiff};
+use std::collections::HashMap;
 use std::convert::From;
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, BufRead, Read};
 use tui::layout::{Constraint, Direction, Layout};
 use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans};
@@ -26,12 +27,12 @@ pub struct App {
     // window status
     scroll: u16,
     len_contents: usize,
-    cur_file_path: Option<DirEntry>,
+    cur_file_path: Option<FolderStatefulList>,
 }
 
 impl App {
     pub fn new(old_dir: String, new_dir: String) -> Self {
-        let files = diff_dir(&old_dir, &new_dir);
+        let files = diff_list_dir(&old_dir, &new_dir);
         let items = StatefulList::with_items(files);
         Self {
             new_dir,
@@ -103,7 +104,7 @@ impl App {
     }
 
     fn enter(&mut self) {
-        self.cur_file_path = Some(self.items.cur().entry.clone());
+        self.cur_file_path = Some(self.items.cur().clone());
     }
 
     pub fn draw<B: Backend>(&mut self, f: &mut Frame<B>) {
@@ -136,7 +137,9 @@ impl App {
                 let lines = vec![Spans::from(path)];
                 ListItem::new(lines).style(match i.state {
                     crate::status::StatusItemType::Deleted => Style::default().fg(Color::Red),
-                    crate::status::StatusItemType::Modified => Style::default().fg(Color::Red),
+                    crate::status::StatusItemType::Modified => {
+                        Style::default().fg(Color::LightYellow)
+                    }
                     crate::status::StatusItemType::New => Style::default().fg(Color::Green),
                     crate::status::StatusItemType::Normal => Style::default(),
                 })
@@ -179,11 +182,18 @@ impl App {
         }
     }
 
-    fn get_diff_spans<'a>(file:&DirEntry, new_dir: &'a str, old_dir: &'a str) -> (Vec<Spans<'a>>, String) {
-        if file.path().is_dir() {
-            return (vec![Spans::from("this is directory")], "error".to_string());
+    fn get_diff_spans<'a>(
+        file: &FolderStatefulList,
+        new_dir: &'a str,
+        old_dir: &'a str,
+    ) -> (Vec<Spans<'a>>, String) {
+        if file.entry.path().is_dir() {
+            return (
+                vec![Spans::from("\n\nthis is directory")],
+                "error".to_string(),
+            );
         }
-        let cur_file_path = match file.path().to_str() {
+        let cur_file_path = match file.entry.path().to_str() {
             Some(p) => p,
             None => "",
         };
@@ -195,7 +205,7 @@ impl App {
         }
         let mut buf_new = String::new();
         let err = File::open(cur_file_path)
-            .expect("file not found")
+            .expect(&format!("file not found: {}", cur_file_path))
             .read_to_string(&mut buf_new);
         if err.is_err() {
             return (
@@ -208,10 +218,28 @@ impl App {
             );
         }
 
+        if file.state == crate::status::StatusItemType::Deleted
+            || file.state == crate::status::StatusItemType::New
+        {
+            
+            let buf = io::BufReader::new(buf_new.as_bytes());
+            let contents: Vec<Spans> = buf
+                .lines()
+                .into_iter()
+                .map(|i| Spans::from(Span::styled(i.unwrap(), Style::default().fg(Color::Red))))
+                .collect();
+
+            let mut title = format!("Deleted: {}", cur_file_path);
+            if file.state == crate::status::StatusItemType::New {
+                title = format!("New File: {}", cur_file_path);
+            }
+            return (contents, title);
+        }
+
         let old_file_path = cur_file_path.replace(new_dir, old_dir);
         let mut buf_old = String::new();
         let err = File::open(&old_file_path)
-            .expect("file not found")
+            .expect(&format!("file not found: {}", old_file_path))
             .read_to_string(&mut buf_old);
         if err.is_err() {
             return (
@@ -245,37 +273,80 @@ impl App {
     }
 }
 
-fn diff_dir(old_path: &str, new_path: &str) -> Vec<FolderStatefulList> {
-    let mut files = Vec::new();
-    for f in walkdir::WalkDir::new(new_path) {
-        let f = f.unwrap();
-        let mut fs = FolderStatefulList {
-            entry: f,
-            state: crate::status::StatusItemType::Normal,
-        };
-        match fs.entry.path().to_str() {
-            Some(fpath) => {
-                if fs.entry.path().is_file() {
-                    let old_file_path = fpath.replace(new_path, old_path);
+fn list_dir(path: &str) -> HashMap<String, DirEntry> {
+    let mut files = HashMap::new();
+    for f in walkdir::WalkDir::new(path) {
+        let entry = f.unwrap();
+        let key = entry
+            .path()
+            .to_str()
+            .unwrap()
+            .replace(path, &"".to_string());
+        files.insert(key, entry);
+    }
+    files
+}
+
+fn diff_list_dir(old_dir: &str, new_dir: &str) -> Vec<FolderStatefulList> {
+    let old_files = list_dir(old_dir);
+    let new_files = list_dir(new_dir);
+    let mut res = Vec::new();
+
+    for (key, entry) in &old_files {
+        match new_files.get(key) {
+            None => {
+                res.push(FolderStatefulList {
+                    entry: entry.clone(),
+                    state: crate::status::StatusItemType::Deleted,
+                });
+            }
+            _ => {}
+        }
+    }
+
+    for (key, entry) in &new_files {
+        match old_files.get(key) {
+            None => {
+                res.push(FolderStatefulList {
+                    entry: entry.clone(),
+                    state: crate::status::StatusItemType::New,
+                });
+            }
+            Some(_) => {
+                if entry.path().is_file() {
+                    let new_file_path = entry.path().to_str().unwrap();
+                    let old_file_path = new_file_path.replace(new_dir, old_dir);
                     let err = File::open(&old_file_path);
                     match err {
                         Ok(_) => {
-                            let is_same = diff(fpath, old_file_path.as_str());
+                            let is_same = diff(new_file_path, old_file_path.as_str());
                             if !is_same {
-                                fs.state = crate::status::StatusItemType::Modified
+                                res.push(FolderStatefulList {
+                                    entry: entry.clone(),
+                                    state: crate::status::StatusItemType::Modified,
+                                });
                             }
+                            // * filter Normal
+                            // else {
+                            //     res.push(FolderStatefulList {
+                            //         entry: entry.clone(),
+                            //         state: crate::status::StatusItemType::Normal,
+                            //     });
+                            // }
                         }
-                        _ => {
-                            fs.state = crate::status::StatusItemType::New;
-                        }
+                        _ => {}
                     }
                 }
             }
-            None => {}
-        }
-        if fs.state != crate::status::StatusItemType::Normal {
-            files.push(fs);
         }
     }
-    files
+
+    res.sort_by(|x, y| {
+        x.entry
+            .path()
+            .to_str()
+            .unwrap()
+            .cmp(y.entry.path().to_str().unwrap())
+    });
+    res
 }
