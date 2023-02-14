@@ -3,30 +3,29 @@ use tui::widgets::ListState;
 ///
 #[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
 pub enum StatusItemType {
-	///
-	New,
-	///
-	Modified,
-	///
-	Deleted,
-	///
-	Normal,
+    ///
+    New,
+    ///
+    Modified,
+    ///
+    Deleted,
+    ///
+    Normal,
 }
 
 ///
 
 #[derive(Clone)]
 pub struct FolderStatefulList {
-	pub entry: walkdir::DirEntry,
-	pub state: StatusItemType, 
-} 
+    pub entry: walkdir::DirEntry,
+    pub state: StatusItemType,
+}
 
 ///
 pub struct StatefulList<T> {
     pub state: ListState,
     pub items: Vec<T>,
 }
-
 
 impl<T> StatefulList<T> {
     pub fn with_items(items: Vec<T>) -> StatefulList<T> {
@@ -68,13 +67,11 @@ impl<T> StatefulList<T> {
         self.state.select(None);
     }
 
-	pub fn cur(&self) -> &T {
-		let i = match self.state.selected() {
-            Some(i) => {
-                i
-            }
+    pub fn cur(&self) -> &T {
+        let i = match self.state.selected() {
+            Some(i) => i,
             None => 0,
         };
-		&self.items[i]
-	}
+        &self.items[i]
+    }
 }

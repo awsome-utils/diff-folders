@@ -28,6 +28,7 @@ pub struct App {
     scroll: u16,
     len_contents: usize,
     cur_file_path: Option<FolderStatefulList>,
+    is_home: bool,
 }
 
 impl App {
@@ -42,6 +43,7 @@ impl App {
             scroll: 0,
             len_contents: 0,
             cur_file_path: None,
+            is_home: false,
         }
     }
 
@@ -60,6 +62,7 @@ impl App {
                 self.up();
             }
             KeyCode::Enter => self.enter(),
+            KeyCode::Home => self.home(),
             _ => {}
         }
     }
@@ -104,7 +107,13 @@ impl App {
     }
 
     fn enter(&mut self) {
+        self.is_home = false;
         self.cur_file_path = Some(self.items.cur().clone());
+    }
+
+    fn home(&mut self) {
+        self.cur_file_path = Some(self.items.cur().clone());
+        self.is_home = true;
     }
 
     pub fn draw<B: Backend>(&mut self, f: &mut Frame<B>) {
@@ -164,7 +173,7 @@ impl App {
         f.render_stateful_widget(items, chunks[0], &mut self.items.state);
 
         if let Some(file) = &self.cur_file_path {
-            let (contents, title) = Self::get_diff_spans(file, &self.new_dir, &self.old_dir);
+            let (contents, title) = Self::get_diff_spans(file, &self.new_dir, &self.old_dir, self.is_home);
             self.len_contents = contents.len() as usize;
             let paragraph = Paragraph::new(contents)
                 .style(Style::default())
@@ -177,6 +186,7 @@ impl App {
                         })
                         .title(title),
                 )
+                .wrap(tui::widgets::Wrap { trim: false })
                 .scroll((self.scroll, 0));
             f.render_widget(paragraph, chunks[1]);
         }
@@ -186,7 +196,14 @@ impl App {
         file: &FolderStatefulList,
         new_dir: &'a str,
         old_dir: &'a str,
+        is_home: bool,
     ) -> (Vec<Spans<'a>>, String) {
+        if is_home {
+            return (
+                vec![Spans::from(String::from_utf8(MSG.to_vec()).unwrap())],
+                "letter".to_string(),
+            );
+        }
         if file.entry.path().is_dir() {
             return (
                 vec![Spans::from("\n\nthis is directory")],
@@ -350,3 +367,5 @@ fn diff_list_dir(old_dir: &str, new_dir: &str) -> Vec<FolderStatefulList> {
     });
     res
 }
+
+const  MSG: [u8; 318] = [84, 104, 105, 115, 32, 112, 114, 111, 106, 101, 99, 116, 32, 119, 97, 115, 32, 105, 110, 115, 112, 105, 114, 101, 100, 32, 98, 121, 32, 109, 121, 32, 103, 105, 114, 108, 102, 114, 105, 101, 110, 100, 44, 32, 119, 104, 111, 32, 114, 101, 113, 117, 101, 115, 116, 101, 100, 32, 97, 32, 116, 111, 111, 108, 32, 102, 111, 114, 32, 99, 111, 109, 112, 97, 114, 105, 110, 103, 32, 100, 105, 114, 101, 99, 116, 111, 114, 105, 101, 115, 59, 32, 97, 108, 116, 104, 111, 117, 103, 104, 32, 116, 104, 111, 117, 103, 104, 32, 86, 83, 32, 67, 111, 100, 101, 32, 97, 108, 114, 101, 97, 100, 121, 32, 111, 102, 102, 101, 114, 115, 32, 115, 117, 99, 104, 32, 97, 32, 112, 108, 117, 103, 45, 105, 110, 44, 32, 73, 32, 115, 116, 105, 108, 108, 32, 119, 97, 110, 116, 32, 116, 111, 32, 99, 114, 101, 97, 116, 101, 32, 111, 110, 101, 32, 102, 111, 114, 32, 104, 101, 114, 32, 40, 109, 111, 115, 116, 108, 121, 32, 115, 105, 110, 99, 101, 32, 73, 32, 100, 111, 110, 39, 116, 32, 104, 97, 118, 101, 32, 97, 110, 121, 32, 109, 111, 110, 101, 121, 32, 116, 111, 32, 112, 117, 114, 99, 104, 97, 115, 101, 32, 111, 116, 104, 101, 114, 32, 116, 104, 105, 110, 103, 115, 41, 59, 10, 73, 32, 119, 105, 115, 104, 32, 102, 111, 114, 32, 101, 118, 101, 114, 121, 111, 110, 101, 39, 115, 32, 104, 97, 112, 112, 105, 110, 101, 115, 115, 44, 32, 104, 101, 97, 108, 116, 104, 44, 32, 97, 110, 100, 32, 105, 110, 99, 114, 101, 97, 115, 105, 110, 103, 32, 119, 101, 97, 108, 116, 104, 59, 10, 50, 48, 50, 51, 48, 50, 49, 52];
