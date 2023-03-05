@@ -239,17 +239,18 @@ impl App {
             || file.state == crate::status::StatusItemType::New
         {
             
+            let mut title = format!("Deleted: {}", cur_file_path);
+            let mut style = Color::Red;
+            if file.state == crate::status::StatusItemType::New {
+                title = format!("New File: {}", cur_file_path);
+                style = Color::Green;
+            }
             let buf = io::BufReader::new(buf_new.as_bytes());
             let contents: Vec<Spans> = buf
                 .lines()
                 .into_iter()
-                .map(|i| Spans::from(Span::styled(i.unwrap(), Style::default().fg(Color::Red))))
+                .map(|i| Spans::from(Span::styled(i.unwrap(), Style::default().fg(style))))
                 .collect();
-
-            let mut title = format!("Deleted: {}", cur_file_path);
-            if file.state == crate::status::StatusItemType::New {
-                title = format!("New File: {}", cur_file_path);
-            }
             return (contents, title);
         }
 
