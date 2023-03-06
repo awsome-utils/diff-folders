@@ -4,15 +4,13 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use diff_folders::app::App;
-use flexi_logger::writers::LogWriter;
+use diff_folders::{app::App, log::init_logger};
 use scopeguard::defer;
 use std::{
     env::args,
-    fs::{self, File, OpenOptions},
-    io::{self, Error, ErrorKind, Write},
-    path::{self},
-    sync::{Arc, Mutex},
+    io::{self, Write},
+    path::{self, Path},
+    str::FromStr,
 };
 use tui::{
     backend::{Backend, CrosstermBackend},
@@ -56,6 +54,22 @@ fn parse_args() -> (String, String) {
     if new_dir.ends_with(path::MAIN_SEPARATOR) {
         new_dir = new_dir[0..new_dir.len() - 1].to_string();
     }
+    let new_dir = String::from_str(
+        Path::new(&new_dir)
+            .canonicalize()
+            .unwrap()
+            .to_str()
+            .unwrap(),
+    )
+    .unwrap();
+    let old_dir = String::from_str(
+        Path::new(&old_dir)
+            .canonicalize()
+            .unwrap()
+            .to_str()
+            .unwrap(),
+    )
+    .unwrap();
     (old_dir, new_dir)
 }
 
@@ -97,56 +111,5 @@ fn shutdown_terminal() {
 
     if let Err(e) = leave_raw_mode {
         log::error!("leave_raw_mode failed:\n{e}\n");
-    }
-}
-
-fn init_logger() -> Result<()> {
-    let dir = directories::BaseDirs::new()
-        .unwrap()
-        .home_dir()
-        .join(".cache")
-        .join("diff-folders");
-    if !dir.exists() {
-        fs::create_dir_all(&dir)?;
-    }
-    let logfile = dir.clone().join("diff-folders.log");
-    if !logfile.exists() {
-        File::create(&logfile)?;
-    }
-    let fd = OpenOptions::new().write(true).append(true).open(logfile).unwrap();
-    let my_writer = FileWriter {
-        file: Arc::new(Mutex::new(fd)),
-    };
-    flexi_logger::Logger::try_with_str("info")
-        .unwrap()
-        .log_to_writer(Box::new(my_writer))
-        .write_mode(flexi_logger::WriteMode::BufferAndFlush)
-        .start()?;
-    Ok(())
-}
-
-struct FileWriter<F> {
-    file: Arc<Mutex<F>>,
-}
-
-impl<F: std::io::Write + Send + Sync> LogWriter for FileWriter<F> {
-    fn write(
-        &self,
-        now: &mut flexi_logger::DeferredNow,
-        record: &flexi_logger::Record,
-    ) -> std::io::Result<()> {
-        let mut file = self
-            .file
-            .lock()
-            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-        flexi_logger::detailed_format(&mut *file, now, record)
-    }
-
-    fn flush(&self) -> std::io::Result<()> {
-        let mut file = self
-            .file
-            .lock()
-            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-        file.flush()
     }
 }
