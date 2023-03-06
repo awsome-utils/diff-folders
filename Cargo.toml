@@ -13,3 +13,6 @@ tui = { version = "0.19", default-features = false, features = ['crossterm', 'se
 crossterm = { version = "0.26.0", features = [ "serde" ] }
 walkdir = "2.3.2"
 file_diff = "1.0.0"
+log = "0.4"
+flexi_logger = "0.25"
+directories = "4.0.1"

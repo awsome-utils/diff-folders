@@ -35,13 +35,17 @@ impl<T> StatefulList<T> {
         }
     }
 
-    pub fn next(&mut self) {
+    pub fn next(&mut self, dist: usize) {
+        let mut page_size = dist;
+        if page_size > self.items.len() {
+            page_size = self.items.len();
+        }
         let i = match self.state.selected() {
             Some(i) => {
-                if i >= self.items.len() - 1 {
+                if i >= self.items.len() - page_size {
                     0
                 } else {
-                    i + 1
+                    i + page_size
                 }
             }
             None => 0,
@@ -49,13 +53,17 @@ impl<T> StatefulList<T> {
         self.state.select(Some(i));
     }
 
-    pub fn previous(&mut self) {
+    pub fn previous(&mut self, dist: usize) {
+        let mut page_size = dist;
+        if page_size > self.items.len() {
+            page_size = self.items.len();
+        }
         let i = match self.state.selected() {
             Some(i) => {
-                if i == 0 {
-                    self.items.len() - 1
+                if i <= page_size  {
+                    self.items.len() - page_size
                 } else {
-                    i - 1
+                    i - page_size
                 }
             }
             None => 0,

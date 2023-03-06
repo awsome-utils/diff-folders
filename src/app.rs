@@ -13,6 +13,8 @@ use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::{backend::Backend, Frame};
 use walkdir::DirEntry;
 
+const PAGE_SIZE: usize = 30;
+
 enum WindowType {
     Left,
     Right,
@@ -61,6 +63,12 @@ impl App {
             KeyCode::Up => {
                 self.up();
             }
+            KeyCode::PageUp => {
+                self.page_up()
+            }
+            KeyCode::PageDown => {
+                self.page_down()
+            }
             KeyCode::Enter => self.enter(),
             KeyCode::Home => self.home(),
             _ => {}
@@ -83,7 +91,7 @@ impl App {
 
     fn up(&mut self) {
         match self.tab {
-            WindowType::Left => self.items.previous(),
+            WindowType::Left => self.items.previous(1),
             WindowType::Right => {
                 if self.scroll > 0 {
                     self.scroll -= 1
@@ -94,7 +102,7 @@ impl App {
 
     fn down(&mut self) {
         match self.tab {
-            WindowType::Left => self.items.next(),
+            WindowType::Left => self.items.next(1),
             WindowType::Right => {
                 let total = self.len_contents as u16;
                 if self.scroll >= total {
@@ -108,12 +116,55 @@ impl App {
 
     fn enter(&mut self) {
         self.is_home = false;
+        if let Some(file) = &self.cur_file_path {
+            if file.entry.path() == self.items.cur().entry.path() {
+                // same file
+                return
+            }
+        }
         self.cur_file_path = Some(self.items.cur().clone());
+        self.scroll = 0
     }
 
     fn home(&mut self) {
         self.cur_file_path = Some(self.items.cur().clone());
         self.is_home = true;
+    }
+
+    fn page_up(&mut self) {
+        match self.tab {
+            WindowType::Left => self.items.previous(PAGE_SIZE),
+            WindowType::Right => {
+                let mut page_size = PAGE_SIZE as u16;
+                let content_length =  self.len_contents as u16;
+                if page_size > content_length {
+                    page_size = content_length;
+                }
+                if self.scroll < page_size  {
+                   self.scroll = 0
+                }else{
+                    self.scroll -= page_size
+                }
+            }
+        }
+    }
+
+    fn page_down(&mut self) {
+        match self.tab {
+            WindowType::Left => self.items.next(PAGE_SIZE),
+            WindowType::Right => {
+                let mut page_size = PAGE_SIZE as u16;
+                let content_length =  self.len_contents as u16;
+                if page_size > content_length {
+                    page_size = content_length;
+                }
+                if self.scroll + page_size >= content_length {
+                    self.scroll = content_length
+                } else {
+                    self.scroll += page_size
+                }
+            }
+        }
     }
 
     pub fn draw<B: Backend>(&mut self, f: &mut Frame<B>) {
@@ -225,6 +276,7 @@ impl App {
             .expect(&format!("file not found: {}", cur_file_path))
             .read_to_string(&mut buf_new);
         if err.is_err() {
+            log::error!("{}", err.as_ref().err().unwrap());
             return (
                 vec![Spans::from(format!(
                     "open file:{}, error: {}",
@@ -260,6 +312,7 @@ impl App {
             .expect(&format!("file not found: {}", old_file_path))
             .read_to_string(&mut buf_old);
         if err.is_err() {
+            log::error!("{}", err.as_ref().err().unwrap());
             return (
                 vec![Spans::from(format!(
                     "open file:{}, error: {}",
