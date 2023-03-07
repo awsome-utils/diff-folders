@@ -13,7 +13,7 @@ cargo install diff-folders
 diff-folders <old_dir|new_file> <new_dir|new_file>
 ```
 
-![demo](./images/demo.gif)
+![demo](https://raw.githubusercontent.com/awsome-utils/diff-folders/develop/images/demo.gif?token=GHSAT0AAAAAAB6A32FRLIFNT2KB7MI4YUTSZAHDO6A)
 
 # Color
 
