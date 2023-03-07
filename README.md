@@ -1,7 +1,7 @@
 # diff-folders
 This tool allows you to display differences in a list of compared folders in the terminal.
 
-(This is my first project to learn rust)
+(This project is what I use to learn rust)
 
 # Usage
 
@@ -21,7 +21,7 @@ diff-folders <old_dir|new_file> <new_dir|new_file>
 | ----------- | ----------- |
 | Red |  deleted      |
 | Green |  created      |
-| Yellow |  Modified      |
+| Yellow |  modified      |
 
 # Shortcut Keys
 
