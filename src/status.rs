@@ -60,7 +60,7 @@ impl<T> StatefulList<T> {
         }
         let i = match self.state.selected() {
             Some(i) => {
-                if i <= page_size  {
+                if i <= page_size {
                     self.items.len() - page_size
                 } else {
                     i - page_size

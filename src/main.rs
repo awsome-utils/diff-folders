@@ -75,7 +75,7 @@ fn parse_args() -> (String, String) {
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()> {
     loop {
-        terminal.draw(|f| app.draw(f))?;
+        app.draw_terminal(terminal)?;
         if let Event::Key(key) = event::read()? {
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
