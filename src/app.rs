@@ -9,7 +9,8 @@ use std::io::{self, BufRead, Read};
 use tui::layout::{Constraint, Direction, Layout};
 use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans};
-use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use tui::widgets::{Block, Borders, Gauge, List, ListItem, Paragraph};
+use tui::Terminal;
 use tui::{backend::Backend, Frame};
 use walkdir::DirEntry;
 
@@ -17,35 +18,35 @@ enum WindowType {
     Left,
     Right,
 }
-
 pub struct App {
     new_dir: String,
     old_dir: String,
-    items: StatefulList<FolderStatefulList>,
     tab: WindowType,
+    items: StatefulList<FolderStatefulList>,
 
     // window status
     scroll: u16,
     len_contents: usize,
     cur_file_path: Option<FolderStatefulList>,
-    is_home: bool,
+
     page_size: u16,
+    is_home: bool,
+    is_loaded: bool,
 }
 
 impl App {
     pub fn new(old_dir: String, new_dir: String) -> Self {
-        let files = diff_list_dir(&old_dir, &new_dir);
-        let items = StatefulList::with_items(files);
         Self {
             new_dir,
             old_dir,
-            items,
             tab: WindowType::Left,
             scroll: 0,
             len_contents: 0,
             cur_file_path: None,
             is_home: false,
+            is_loaded: false,
             page_size: 0,
+            items: StatefulList::with_items(Vec::new()),
         }
     }
 
@@ -173,6 +174,43 @@ impl App {
                 }
             }
         }
+    }
+
+    fn draw_gauge<B: Backend>(&mut self, terminal: &mut Terminal<B>) {
+        self.diff_list_dir(&mut move |p| {
+            let _ = terminal.draw(|f| {
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .margin(1)
+                    .constraints(
+                        [
+                            Constraint::Percentage(40),
+                            Constraint::Length(5),
+                            Constraint::Percentage(40),
+                        ]
+                        .as_ref(),
+                    )
+                    .split(f.size());
+                let gauge = Gauge::default()
+                    .block(
+                        Block::default()
+                            .title("Loading files")
+                            .borders(Borders::ALL),
+                    )
+                    .gauge_style(Style::default().fg(Color::White))
+                    .percent(p);
+                f.render_widget(gauge, chunks[1]);
+            }); // loading files
+        });
+    }
+
+    pub fn draw_terminal<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
+        if !self.is_loaded {
+            self.draw_gauge(terminal);
+            self.is_loaded = true;
+        }
+        terminal.draw(|f| self.draw(f))?;
+        return Ok(());
     }
 
     pub fn draw<B: Backend>(&mut self, f: &mut Frame<B>) {
@@ -352,6 +390,73 @@ impl App {
         let title = format!("Diff: {} and {}", cur_file_path, old_file_path);
         (contents, title)
     }
+
+    fn diff_list_dir(&mut self, progress: &mut impl FnMut(u16)) {
+        progress(10);
+        let old_dir = &self.old_dir;
+        let new_dir = &self.new_dir;
+        let old_files = list_dir(old_dir);
+        progress(20);
+        let new_files = list_dir(new_dir);
+        progress(30);
+        let mut res = Vec::new();
+
+        for (key, entry) in &old_files {
+            match new_files.get(key) {
+                None => {
+                    res.push(FolderStatefulList {
+                        entry: entry.clone(),
+                        state: crate::status::StatusItemType::Deleted,
+                    });
+                }
+                _ => {}
+            }
+        }
+        progress(40);
+
+        for (key, entry) in &new_files {
+            match old_files.get(key) {
+                None => {
+                    res.push(FolderStatefulList {
+                        entry: entry.clone(),
+                        state: crate::status::StatusItemType::New,
+                    });
+                }
+                Some(_) => {
+                    if entry.path().is_file() {
+                        let new_file_path = entry.path().canonicalize().unwrap();
+                        let old_file_path =
+                            new_file_path.to_str().unwrap().replace(new_dir, old_dir);
+                        let err = File::open(&old_file_path);
+                        match err {
+                            Ok(_) => {
+                                let is_same =
+                                    diff(new_file_path.to_str().unwrap(), old_file_path.as_str());
+                                if !is_same {
+                                    res.push(FolderStatefulList {
+                                        entry: entry.clone(),
+                                        state: crate::status::StatusItemType::Modified,
+                                    });
+                                }
+                                // * filter Normal
+                                // else {
+                                //     res.push(FolderStatefulList {
+                                //         entry: entry.clone(),
+                                //         state: crate::status::StatusItemType::Normal,
+                                //     });
+                                // }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+        progress(80);
+        delta_folder_stateful_list(&mut res);
+        self.items = StatefulList::with_items(res);
+        progress(100);
+    }
 }
 
 fn list_dir(path: &str) -> HashMap<String, DirEntry> {
@@ -368,64 +473,6 @@ fn list_dir(path: &str) -> HashMap<String, DirEntry> {
         files.insert(key, entry);
     }
     files
-}
-
-fn diff_list_dir(old_dir: &str, new_dir: &str) -> Vec<FolderStatefulList> {
-    let old_files = list_dir(old_dir);
-    let new_files = list_dir(new_dir);
-    let mut res = Vec::new();
-
-    for (key, entry) in &old_files {
-        match new_files.get(key) {
-            None => {
-                res.push(FolderStatefulList {
-                    entry: entry.clone(),
-                    state: crate::status::StatusItemType::Deleted,
-                });
-            }
-            _ => {}
-        }
-    }
-
-    for (key, entry) in &new_files {
-        match old_files.get(key) {
-            None => {
-                res.push(FolderStatefulList {
-                    entry: entry.clone(),
-                    state: crate::status::StatusItemType::New,
-                });
-            }
-            Some(_) => {
-                if entry.path().is_file() {
-                    let new_file_path = entry.path().canonicalize().unwrap();
-                    let old_file_path = new_file_path.to_str().unwrap().replace(new_dir, old_dir);
-                    let err = File::open(&old_file_path);
-                    match err {
-                        Ok(_) => {
-                            let is_same =
-                                diff(new_file_path.to_str().unwrap(), old_file_path.as_str());
-                            if !is_same {
-                                res.push(FolderStatefulList {
-                                    entry: entry.clone(),
-                                    state: crate::status::StatusItemType::Modified,
-                                });
-                            }
-                            // * filter Normal
-                            // else {
-                            //     res.push(FolderStatefulList {
-                            //         entry: entry.clone(),
-                            //         state: crate::status::StatusItemType::Normal,
-                            //     });
-                            // }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-    }
-    delta_folder_stateful_list(&mut res);
-    res
 }
 
 fn delta_folder_stateful_list(files: &mut Vec<FolderStatefulList>) {
